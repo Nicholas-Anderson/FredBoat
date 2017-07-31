@@ -27,12 +27,14 @@ package fredboat.db;
 
 import fredboat.FredBoat;
 import fredboat.db.entity.IEntity;
-import org.hibernate.exception.JDBCConnectionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.persistence.EntityManager;
-import java.io.Serializable;
+import javax.persistence.PersistenceException;
+import javax.persistence.Query;
+import java.util.Collection;
+import java.util.Map;
 
 public class EntityWriter {
 
@@ -43,46 +45,84 @@ public class EntityWriter {
      * @param <E>    entity needs to implement IEntity
      * @return the merged entity
      */
-    public static <E extends IEntity> E merge(E entity) {
-        DatabaseManager dbManager = FredBoat.getDbManager();
-        if (!dbManager.isAvailable()) {
-            throw new DatabaseNotReadyException();
-        }
-
+    public static <E extends IEntity> E merge(E entity) throws DatabaseNotReadyException {
+        DatabaseManager dbManager = FredBoat.obtainAvailableDbManager();
         EntityManager em = dbManager.getEntityManager();
         try {
             em.getTransaction().begin();
             E mergedEntity = em.merge(entity);
             em.getTransaction().commit();
             return mergedEntity;
-        } catch (JDBCConnectionException e) {
-            log.error("Failed to merge entity {}", entity, e);
+        } catch (PersistenceException e) {
+            log.error("Failed to merge entity {}", entity.getId(), e);
             throw new DatabaseNotReadyException(e);
         } finally {
             em.close();
         }
     }
 
+
     /**
-     * @param id    primary key of the entity to be deleted
-     * @param clazz class of the entity to be deleted
-     * @param <E>   entity needs to implement IEntity
+     * @param primaryKey key of the object to the deleted
+     * @param clazz      class of the object to be deleted
+     * @param <T>        class of the object to be deleted
+     * @return true if such an object existed in the database, false if not
      */
-    public static <E extends IEntity<I>, I extends Serializable> void delete(I id, Class<E> clazz) {
-        DatabaseManager dbManager = FredBoat.getDbManager();
-        if (!dbManager.isAvailable()) {
-            throw new DatabaseNotReadyException("The database is not available currently. Please try again later.");
-        }
+    public static <T> boolean deleteObject(Object primaryKey, Class<T> clazz) throws DatabaseNotReadyException {
+        DatabaseManager dbManager = FredBoat.obtainAvailableDbManager();
 
         EntityManager em = dbManager.getEntityManager();
         try {
-            E entity = em.find(clazz, id);
-
-            if (entity != null) {
+            T object = em.find(clazz, primaryKey);
+            if (object != null) {
                 em.getTransaction().begin();
-                em.remove(entity);
+                em.remove(object);
                 em.getTransaction().commit();
+                return true;
             }
+            return false;
+        } catch (PersistenceException e) {
+            log.error("Failed to delete object with key {} of class {}", primaryKey.toString(), clazz.getSimpleName(), e);
+            throw new DatabaseNotReadyException(e);
+        } finally {
+            em.close();
+        }
+    }
+
+    public static <E extends IEntity> boolean deleteEntity(E entity) throws DatabaseNotReadyException {
+        return deleteObject(entity.getId(), entity.getClass());
+    }
+
+    public static void mergeAll(Collection<? extends IEntity> entities) throws DatabaseNotReadyException {
+        DatabaseManager dbManager = FredBoat.obtainAvailableDbManager();
+        EntityManager em = dbManager.getEntityManager();
+        try {
+            em.getTransaction().begin();
+            for (IEntity entity : entities) {
+                em.merge(entity);
+            }
+            em.getTransaction().commit();
+        } catch (PersistenceException e) {
+            log.error("Failed to merge entities", e);
+        } finally {
+            em.close();
+        }
+    }
+
+    public static int executeJPQLQuery(String queryString, Map<String, Object> parameters) throws
+            DatabaseNotReadyException {
+        DatabaseManager dbManager = FredBoat.obtainAvailableDbManager();
+        EntityManager em = dbManager.getEntityManager();
+        try {
+            Query query = em.createQuery(queryString);
+            parameters.forEach(query::setParameter);
+            em.getTransaction().begin();
+            int updatedOrDeleted = query.executeUpdate();
+            em.getTransaction().commit();
+            return updatedOrDeleted;
+        } catch (PersistenceException e) {
+            log.error("Failed to execute JPQL query {}", queryString, e);
+            throw new DatabaseNotReadyException(e);
         } finally {
             em.close();
         }

@@ -62,6 +62,7 @@ public class GuildConfig implements IEntity<String> {
     public GuildConfig() {
     }
 
+    @Override
     public String getId() {
         return guildId;
     }

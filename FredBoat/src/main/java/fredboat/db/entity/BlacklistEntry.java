@@ -75,6 +75,11 @@ public class BlacklistEntry implements IEntity<Long> {
     }
 
     @Override
+    public Long getId() {
+        return id;
+    }
+
+    @Override
     public int hashCode() {
         return Long.hashCode(id);
     }
@@ -82,10 +87,6 @@ public class BlacklistEntry implements IEntity<Long> {
     //Boilerplate code below
 
     public BlacklistEntry() {
-    }
-
-    public Long getId() {
-        return id;
     }
 
     public int getLevel() {

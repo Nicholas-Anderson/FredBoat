@@ -159,7 +159,7 @@ public class Blacklist {
      */
     public synchronized void liftBlacklist(long id) {
         blacklist.remove(id);
-        EntityWriter.delete(id, BlacklistEntry.class);
+        EntityWriter.deleteObject(id, BlacklistEntry.class);
     }
 
     /**
