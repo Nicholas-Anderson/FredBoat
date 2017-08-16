@@ -120,11 +120,12 @@ public class PlayCommand extends Command implements IMusicCommand, ICommandRestr
 
     private void handleNoArguments(Guild guild, TextChannel channel, Member invoker, Message message) {
         GuildPlayer player = PlayerRegistry.get(guild);
+        player.setCurrentTC(channel);
         if (player.isQueueEmpty()) {
             channel.sendMessage(I18n.get(guild).getString("playQueueEmpty")).queue();
         } else if (player.isPlaying()) {
             channel.sendMessage(I18n.get(guild).getString("playAlreadyPlaying")).queue();
-        } else if (player.getHumanUsersInVC().isEmpty() && guild.getAudioManager().isConnected()) {
+        } else if (player.getHumanUsersInCurrentVC().isEmpty() && guild.getAudioManager().isConnected()) {
             channel.sendMessage(I18n.get(guild).getString("playVCEmpty")).queue();
         } else if(!guild.getAudioManager().isConnected()) {
             // When we just want to continue playing, but the user is not in a VC

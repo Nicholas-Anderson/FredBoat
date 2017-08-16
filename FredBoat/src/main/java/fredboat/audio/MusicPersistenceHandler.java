@@ -25,63 +25,44 @@
 
 package fredboat.audio;
 
-import com.sedmelluq.discord.lavaplayer.tools.io.MessageInput;
-import com.sedmelluq.discord.lavaplayer.tools.io.MessageOutput;
-import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
-import fredboat.Config;
 import fredboat.FredBoat;
-import fredboat.audio.queue.AudioTrackContext;
-import fredboat.audio.queue.RepeatMode;
-import fredboat.audio.queue.SplitAudioTrackContext;
+import fredboat.db.EntityReader;
 import fredboat.feature.I18n;
-import fredboat.shared.constant.DistributionEnum;
 import fredboat.shared.constant.ExitCodes;
-import net.dv8tion.jda.core.entities.Member;
-import net.dv8tion.jda.core.entities.TextChannel;
-import net.dv8tion.jda.core.entities.VoiceChannel;
-import org.apache.commons.codec.binary.Base64;
-import org.apache.commons.io.FileUtils;
-import org.json.JSONArray;
-import org.json.JSONObject;
+import net.dv8tion.jda.core.JDA;
+import net.dv8tion.jda.core.entities.Guild;
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.IOException;
-import java.nio.charset.Charset;
-import java.text.MessageFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class MusicPersistenceHandler {
 
-    private static final org.slf4j.Logger log = LoggerFactory.getLogger(MusicPersistenceHandler.class);
+    private static final Logger log = LoggerFactory.getLogger(MusicPersistenceHandler.class);
 
     private MusicPersistenceHandler() {
     }
 
     public static void handlePreShutdown(int code) {
-        File dir = new File("music_persistence");
-        if (!dir.exists()) {
-            dir.mkdir();
-        }
-        HashMap<String, GuildPlayer> reg = PlayerRegistry.getRegistry();
+        //make a copy of the reg list to avoid concurrent modification if players get added/deleted while this runs
+        List<GuildPlayer> players = new ArrayList<>(PlayerRegistry.getRegistry().values());
 
         boolean isUpdate = code == ExitCodes.EXIT_CODE_UPDATE;
         boolean isRestart = code == ExitCodes.EXIT_CODE_RESTART;
 
-        for (String gId : reg.keySet()) {
-            try {
-                GuildPlayer player = reg.get(gId);
+        long started = System.currentTimeMillis();
+        int playersSaved = 0;
 
-                if (!player.isPlaying()) {
-                    continue;//Nothing to see here
-                }
-
+        log.info("Saving {} guild players", players.size());
+        for (GuildPlayer player : players) {
+            playersSaved++;
+            //if the player is being used make an announcement to the users
+            if (player.isPlaying()) {
                 String msg;
-
                 if (isUpdate) {
                     msg = I18n.get(player.getGuild()).getString("shutdownUpdating");
                 } else if (isRestart) {
@@ -89,171 +70,47 @@ public class MusicPersistenceHandler {
                 } else {
                     msg = I18n.get(player.getGuild()).getString("shutdownIndef");
                 }
-
                 player.getActiveTextChannel().sendMessage(msg).queue();
-
-                JSONObject data = new JSONObject();
-                data.put("vc", player.getUserCurrentVoiceChannel(player.getGuild().getSelfMember()).getId());
-                data.put("tc", player.getActiveTextChannel().getId());
-                data.put("isPaused", player.isPaused());
-                data.put("volume", Float.toString(player.getVolume()));
-                data.put("repeatMode", player.getRepeatMode());
-                data.put("shuffle", player.isShuffle());
-
-                if (player.getPlayingTrack() != null) {
-                    data.put("position", player.getPlayingTrack().getEffectivePosition());
-                }
-
-                ArrayList<JSONObject> identifiers = new ArrayList<>();
-
-                for (AudioTrackContext atc : player.getRemainingTracks()) {
-                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                    AbstractPlayer.getPlayerManager().encodeTrack(new MessageOutput(baos), atc.getTrack());
-
-                    JSONObject ident = new JSONObject()
-                            .put("message", Base64.encodeBase64String(baos.toByteArray()))
-                            .put("user", atc.getMember().getUser().getId());
-
-                    if(atc instanceof SplitAudioTrackContext) {
-                        JSONObject split = new JSONObject();
-                        SplitAudioTrackContext c = (SplitAudioTrackContext) atc;
-                        split.put("title", c.getEffectiveTitle())
-                                .put("startPos", c.getStartPosition())
-                                .put("endPos", c.getStartPosition() + c.getEffectiveDuration());
-
-                        ident.put("split", split);
-                    }
-
-                    identifiers.add(ident);
-                }
-
-                data.put("sources", identifiers);
-
-                try {
-                    FileUtils.writeStringToFile(new File(dir, gId), data.toString(), Charset.forName("UTF-8"));
-                } catch (IOException ex) {
-                    player.getActiveTextChannel().sendMessage(MessageFormat.format(I18n.get(player.getGuild()).getString("shutdownPersistenceFail"), ex.getMessage())).queue();
-                }
-            } catch (Exception ex) {
-                log.error("Error when saving persistence file", ex);
             }
-        }
-    }
-
-    public static void reloadPlaylists() {
-        File dir = new File("music_persistence");
-
-        if(Config.CONFIG.getDistribution() == DistributionEnum.MUSIC) {
-            log.warn("Music persistence loading is currently disabled!");
-
-            File[] files = dir.listFiles();
-            if (files != null) {
-                for (File f : files) {
-                    boolean deleted = f.delete();
-                    log.info(deleted ? "Deleted persistence file: " + f : "Failed to delete persistence file: " + f);
-                }
-
-                dir.delete();
-            }
-            return;
-        }
-
-        log.info("Began reloading playlists");
-        if (!dir.exists()) {
-            return;
-        }
-        log.info("Found persistence data: " + Arrays.toString(dir.listFiles()));
-
-        for (File file : dir.listFiles()) {
             try {
-                String gId = file.getName();
-                JSONObject data = new JSONObject(FileUtils.readFileToString(file, Charset.forName("UTF-8")));
-
-                //TODO: Make shard in-specific
-                boolean isPaused = data.getBoolean("isPaused");
-                final JSONArray sources = data.getJSONArray("sources");
-                VoiceChannel vc = FredBoat.getVoiceChannelById(Long.valueOf(data.getString("vc")));
-                TextChannel tc = FredBoat.getTextChannelById(Long.valueOf(data.getString("tc")));
-                float volume = Float.parseFloat(data.getString("volume"));
-                RepeatMode repeatMode = data.getEnum(RepeatMode.class, "repeatMode");
-                boolean shuffle = data.getBoolean("shuffle");
-
-                GuildPlayer player = PlayerRegistry.get(vc.getJDA(), gId);
-
-                player.joinChannel(vc);
-                player.setCurrentTC(tc);
-                if(Config.CONFIG.getDistribution().volumeSupported()) {
-                    player.setVolume(volume);
-                }
-                player.setRepeatMode(repeatMode);
-                player.setShuffle(shuffle);
-
-                final boolean[] isFirst = {true};
-
-                sources.forEach((Object t) -> {
-                    JSONObject json = (JSONObject) t;
-                    byte[] message = Base64.decodeBase64(json.getString("message"));
-                    Member member = vc.getGuild().getMember(vc.getJDA().getUserById(json.getString("user")));
-                    if (member == null)
-                        member = vc.getGuild().getSelfMember(); //member left the guild meanwhile, set ourselves as the one who added the song
-
-                    AudioTrack at;
-                    try {
-                        ByteArrayInputStream bais = new ByteArrayInputStream(message);
-                        at = AbstractPlayer.getPlayerManager().decodeTrack(new MessageInput(bais)).decodedTrack;
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
-
-                    if (at == null) {
-                        log.error("Loaded track that was null! Skipping...");
-                        return;
-                    }
-
-                    // Handle split tracks
-                    AudioTrackContext atc;
-                    JSONObject split = json.optJSONObject("split");
-                    if(split != null) {
-                        atc = new SplitAudioTrackContext(at, member,
-                                split.getLong("startPos"),
-                                split.getLong("endPos"),
-                                split.getString("title")
-                        );
-                        at.setPosition(split.getLong("startPos"));
-
-                        if (isFirst[0]) {
-                            isFirst[0] = false;
-                            if (data.has("position")) {
-                                at.setPosition(split.getLong("startPos") + data.getLong("position"));
-                            }
-                        }
-                    } else {
-                        atc = new AudioTrackContext(at, member);
-
-                        if (isFirst[0]) {
-                            isFirst[0] = false;
-                            if (data.has("position")) {
-                                at.setPosition(data.getLong("position"));
-                            }
-                        }
-                    }
-
-                    player.queue(atc);
-                });
-
-                player.setPause(isPaused);
-                tc.sendMessage(MessageFormat.format(I18n.get(player.getGuild()).getString("reloadSuccess"), sources.length())).queue();
-            } catch (Exception ex) {
-                log.error("Error when loading persistence file", ex);
+                player.save(true);
+            } catch (Exception e) {
+                log.error("Error when saving guild player for guild {}", player.getGuild().getId(), e);
             }
         }
 
-        for (File f : dir.listFiles()) {
-            boolean deleted = f.delete();
-            log.info(deleted ? "Deleted persistence file: " + f : "Failed to delete persistence file: " + f);
-        }
 
-        dir.delete();
+        log.info("Saved {} guild players in {} ms", playersSaved, System.currentTimeMillis() - started);
     }
 
+    /**
+     * Reloads unpaused guild players for the given shard
+     */
+    public static void restoreGuildPlayers(FredBoat shard) {
+        log.info("Began restoring guild players for shard {} with {} guilds",
+                shard.getShardInfo().getShardId(), shard.getGuildCount());
+        long started = System.currentTimeMillis();
+
+        JDA jda = shard.getJda();
+
+        Set<Long> guildIds = jda.getGuilds().stream().map(Guild::getIdLong).collect(Collectors.toSet());
+
+        String query = "SELECT a.guildId FROM GuildPlayerData a WHERE a.isPaused = false";
+        List<Long> activePlayers = EntityReader.selectJPQLQuery(query, Collections.emptyMap(), Long.class);
+
+        activePlayers.retainAll(guildIds);
+
+        int playersRestoredCount = 0;
+        for (long guildId : activePlayers) {
+            try {
+                PlayerRegistry.get(jda, Long.toString(guildId));
+                playersRestoredCount++;
+            } catch (Exception e) {
+                log.error("Exception when restoring guild player for guild {}", guildId, e);
+            }
+        }
+
+        log.info("Restored {} guild players for shard {} in {}ms",
+                playersRestoredCount, shard.getShardInfo().getShardId(), System.currentTimeMillis() - started);
+    }
 }

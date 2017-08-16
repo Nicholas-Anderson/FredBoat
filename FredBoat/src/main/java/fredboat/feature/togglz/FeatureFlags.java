@@ -52,6 +52,10 @@ public enum FeatureFlags implements Feature {
 
     @Label("Patron validation")
     PATRON_VALIDATION,
+
+    @Label("Persistent audio queues")
+    @EnabledByDefault
+    PERSISTENT_TRACK_PROVIDER,
     ;
 
     public boolean isActive() {

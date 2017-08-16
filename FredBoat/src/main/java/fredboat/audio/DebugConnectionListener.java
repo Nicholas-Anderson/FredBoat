@@ -33,15 +33,15 @@ import net.dv8tion.jda.core.entities.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class DebugConnectionListener implements ConnectionListener {
+public class DebugConnectionListener implements ConnectionListener {
 
     private static final Logger log = LoggerFactory.getLogger(DebugConnectionListener.class);
 
     private ConnectionStatus oldStatus = null;
-    private final String guildId;
+    private final long guildId;
     private final FredBoat.ShardInfo shardInfo;
 
-    DebugConnectionListener(String guildId, FredBoat.ShardInfo shardInfo) {
+    public DebugConnectionListener(long guildId, FredBoat.ShardInfo shardInfo) {
         this.guildId = guildId;
         this.shardInfo = shardInfo;
     }
