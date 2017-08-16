@@ -27,7 +27,7 @@ package fredboat.perms;
 
 import fredboat.Config;
 import fredboat.db.EntityReader;
-import fredboat.db.entity.GuildPermissions;
+import fredboat.db.entity.common.GuildPermissions;
 import fredboat.feature.togglz.FeatureFlags;
 import fredboat.util.DiscordUtil;
 import fredboat.util.TextUtils;

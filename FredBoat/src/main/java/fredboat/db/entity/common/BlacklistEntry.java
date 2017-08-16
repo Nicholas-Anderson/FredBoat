@@ -1,4 +1,5 @@
 /*
+ *
  * MIT License
  *
  * Copyright (c) 2017 Frederik Ar. Mikkelsen
@@ -22,8 +23,9 @@
  * SOFTWARE.
  */
 
-package fredboat.db.entity;
+package fredboat.db.entity.common;
 
+import fredboat.db.entity.IEntity;
 import org.hibernate.annotations.ColumnDefault;
 
 import javax.persistence.Column;

@@ -155,7 +155,7 @@ public abstract class FredBoat {
             log.warn("No JDBC URL and more than 2 shard found! Initializing the SQLi DB is potentially dangerous too. Skipping...");
         } else {
             log.warn("No JDBC URL found, skipped database connection, falling back to internal SQLite db.");
-            dbManager = new DatabaseManager("jdbc:sqlite:fredboat.db", "org.hibernate.dialect.SQLiteDialect",
+            dbManager = new DatabaseManager("jdbc:sqlite:fredboat.db", DatabaseManager.SQLITE_DIALECT,
                     Config.CONFIG.getHikariPoolSize());
             dbManager.startup();
         }

@@ -28,6 +28,7 @@ package fredboat.db;
 
 import fredboat.FredBoat;
 import fredboat.db.entity.IEntity;
+import org.hibernate.Session;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,6 +36,7 @@ import javax.persistence.EntityManager;
 import javax.persistence.PersistenceException;
 import javax.persistence.TypedQuery;
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -80,6 +82,21 @@ public class EntityReader {
         } catch (InstantiationException | IllegalAccessException e) {
             throw new RuntimeException("Could not create an entity of class " + clazz.getName(), e);
         }
+    }
+
+    //result will be ordered by the order of the id list, but may contain null for unknown entities
+    public static <E extends IEntity<I>, I extends Serializable> List<E> getEntities(List<I> ids, Class<E> clazz)
+            throws DatabaseNotReadyException {
+        EntityManager em = FredBoat.obtainAvailableDbManager().getEntityManager();
+        List<E> results = new ArrayList<>();
+        try {
+            results = em.unwrap(Session.class).byMultipleIds(clazz).withBatchSize(1000).multiLoad(ids);
+        } catch (PersistenceException e) {
+            log.error("Error while loading entities of class {} from DB", clazz.getName(), e);
+        } finally {
+            em.close();
+        }
+        return results;
     }
 
     /**

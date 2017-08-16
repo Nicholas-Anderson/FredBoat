@@ -1,4 +1,5 @@
 /*
+ *
  * MIT License
  *
  * Copyright (c) 2017 Frederik Ar. Mikkelsen
@@ -20,11 +21,11 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
- *
  */
 
-package fredboat.db.entity;
+package fredboat.db.entity.common;
 
+import fredboat.db.entity.IEntity;
 import fredboat.perms.PermissionLevel;
 import org.hibernate.annotations.Cache;
 import org.hibernate.annotations.CacheConcurrencyStrategy;
@@ -46,7 +47,8 @@ public class GuildPermissions implements IEntity<String> {
     @Id
     private String id;
 
-    public GuildPermissions() {}
+    public GuildPermissions() {
+    }
 
     @Override
     public void setId(String id) {

@@ -29,7 +29,7 @@ import com.mashape.unirest.http.exceptions.UnirestException;
 import fredboat.FredBoat;
 import fredboat.db.EntityReader;
 import fredboat.db.EntityWriter;
-import fredboat.db.entity.UConfig;
+import fredboat.db.entity.common.UConfig;
 import fredboat.util.DiscordUtil;
 import net.dv8tion.jda.core.entities.User;
 import org.slf4j.LoggerFactory;
