@@ -31,7 +31,7 @@ import javax.persistence.Table;
 
 @Entity
 @Table(name = "user_config")
-public class UConfig implements IEntity {
+public class UConfig implements IEntity<String> {
 
     @Id
     private String userId;
@@ -62,6 +62,11 @@ public class UConfig implements IEntity {
     @Override
     public void setId(String id) {
         this.userId = id;
+    }
+
+    @Override
+    public String getId() {
+        return userId;
     }
 
     public UConfig() {

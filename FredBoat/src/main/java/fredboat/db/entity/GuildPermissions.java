@@ -40,7 +40,7 @@ import java.util.List;
 @Entity
 @Table(name = "guild_permissions")
 @Cache(usage= CacheConcurrencyStrategy.NONSTRICT_READ_WRITE, region="guild_permissions")
-public class GuildPermissions implements IEntity {
+public class GuildPermissions implements IEntity<String> {
 
     // Guild ID
     @Id
@@ -55,6 +55,11 @@ public class GuildPermissions implements IEntity {
         // Set up default permissions. Note that the @everyone role of a guild is of the same snowflake as the guild
         this.djList = id;
         this.userList = id;
+    }
+
+    @Override
+    public String getId() {
+        return id;
     }
 
     @Column(name = "list_admin", nullable = false, columnDefinition = "text")
